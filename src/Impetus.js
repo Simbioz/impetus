@@ -18,7 +18,10 @@ export default class Impetus {
         initialValues,
         boundX,
         boundY,
-        bounce = true
+        bounce = true,
+        down,
+        up,
+        stopPropagation = false
     }) {
         var boundXmin, boundXmax, boundYmin, boundYmax, pointerLastX, pointerLastY, pointerCurrentX, pointerCurrentY, pointerId, decVelX, decVelY;
         var targetX = 0;
@@ -29,7 +32,6 @@ export default class Impetus {
         var paused = false;
         var decelerating = false;
         var trackingPoints = [];
-
 
         /**
          * Initialize instance
@@ -219,8 +221,10 @@ export default class Impetus {
             // it's been marked as handled.
             // https://dlinau.wordpress.com/2015/09/16/avoid-mixing-reacts-event-system-with-native-dom-event-handling/
             // https://github.com/facebook/react/issues/8693
-            if (ev.handledByImpetus) return;
-            ev.handledByImpetus = true;
+            if (stopPropagation) {
+              if (ev.handledByImpetus) return;
+              ev.handledByImpetus = true;
+            }
 
             var event = normalizeEvent(ev);
             if (!pointerActive && !paused) {
@@ -234,6 +238,7 @@ export default class Impetus {
                 addTrackingPoint(pointerLastX, pointerLastY);
 
                 addRuntimeEvents();
+                if (down) down();
             }
         }
 
@@ -262,6 +267,7 @@ export default class Impetus {
 
             if (pointerActive && event.id === pointerId) {
                 stopTracking();
+                if (up) up();
             }
         }
 
