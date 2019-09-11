@@ -21,7 +21,8 @@ export default class Impetus {
         bounce = true,
         down,
         up,
-        stopPropagation = false
+        disablePropagation = false, // If set to true, parent impetus instances never trigger. When false, embedded impetus instances always trigger together.
+        startThreshold = { x: 0, y: 0 } // The (absolute) amount of pixels to move in each direction before the drag actually starts
     }) {
         var boundXmin, boundXmax, boundYmin, boundYmax, pointerLastX, pointerLastY, pointerCurrentX, pointerCurrentY, pointerId, decVelX, decVelY;
         var targetX = 0;
@@ -32,6 +33,9 @@ export default class Impetus {
         var paused = false;
         var decelerating = false;
         var trackingPoints = [];
+        var propagationForceStopped = false;
+        var previousPosition = null;
+        var moveTotalDistance = null;
 
         /**
          * Initialize instance
@@ -69,6 +73,15 @@ export default class Impetus {
             sourceEl.addEventListener('touchstart', onDown, getPassiveSupported() ? {passive: true} : false);
             sourceEl.addEventListener('mousedown', onDown, getPassiveSupported() ? {passive: true} : false);
         })();
+
+        /**
+         * Calling this will immediately stop propagating touch
+         * events to parent impetus instances until an "up" event
+         * occurs in the current impetus.
+         */
+        this.forceStopPropagation = function() {
+          propagationForceStopped = true;
+        }
 
         /**
          * In edge cases where you may need to
@@ -221,10 +234,13 @@ export default class Impetus {
             // it's been marked as handled.
             // https://dlinau.wordpress.com/2015/09/16/avoid-mixing-reacts-event-system-with-native-dom-event-handling/
             // https://github.com/facebook/react/issues/8693
-            if (stopPropagation) {
+            if (disablePropagation || propagationForceStopped) {
               if (ev.handledByImpetus) return;
               ev.handledByImpetus = true;
             }
+
+            previousPosition = getPosition(ev);
+            moveTotalDistance = { x: 0, y: 0 };
 
             var event = normalizeEvent(ev);
             if (!pointerActive && !paused) {
@@ -250,7 +266,20 @@ export default class Impetus {
             ev.preventDefault();
             var event = normalizeEvent(ev);
 
-            if (pointerActive && event.id === pointerId) {
+            // This is required so that we can force propagation stop after starting to drag
+            if (disablePropagation || propagationForceStopped) {
+              if (ev.handledByImpetus) return;
+              ev.handledByImpetus = true;
+            }
+
+            // Check if we've moved the pointer enough to actually start dragging
+            var position = getPosition(ev);
+            moveTotalDistance.x += Math.abs(position.x - previousPosition.x);
+            moveTotalDistance.y += Math.abs(position.y - previousPosition.y);
+            var exceededStartThreshold = moveTotalDistance.x > startThreshold.x && moveTotalDistance.y > startThreshold.y;
+            previousPosition = position;
+
+            if (pointerActive && event.id === pointerId && exceededStartThreshold) {
                 pointerCurrentX = event.x;
                 pointerCurrentY = event.y;
                 addTrackingPoint(pointerLastX, pointerLastY);
@@ -266,8 +295,9 @@ export default class Impetus {
             var event = normalizeEvent(ev);
 
             if (pointerActive && event.id === pointerId) {
-                stopTracking();
-                if (up) up();
+              propagationForceStopped = false;
+              stopTracking();
+              if (up) up();
             }
         }
 
@@ -473,6 +503,16 @@ export default class Impetus {
             } else {
                 decelerating = false;
             }
+        }
+
+        /**
+         * Get an event's position as an object with x and y coordinates
+         */
+        function getPosition(ev) {
+          return {
+            x: ev.touches ? ev.touches[0].clientX : ev.clientX,
+            y: ev.touches ? ev.touches[0].clientY : ev.clientY
+          }
         }
     }
 }
