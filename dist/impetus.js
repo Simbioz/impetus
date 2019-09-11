@@ -23,7 +23,8 @@
     // @see https://github.com/metafizzy/flickity/issues/457#issuecomment-254501356
     window.addEventListener('touchmove', function () {}, getPassiveSupported() ? { passive: false } : false);
 
-    var Impetus = function Impetus(_ref) {
+    var Impetus = function Impetus(_ref) // The (absolute) amount of pixels to move in each direction before the drag actually starts
+    {
         var _ref$source = _ref.source;
         var sourceEl = _ref$source === undefined ? document : _ref$source;
         var updateCallback = _ref.update;
@@ -36,6 +37,13 @@
         var boundY = _ref.boundY;
         var _ref$bounce = _ref.bounce;
         var bounce = _ref$bounce === undefined ? true : _ref$bounce;
+        var down = _ref.down;
+        var up = _ref.up;
+        var _ref$disablePropagation = _ref.disablePropagation;
+        var disablePropagation = _ref$disablePropagation === undefined ? false : _ref$disablePropagation;
+        var _ref$startThreshold = _ref.startThreshold;
+        var // If set to true, parent impetus instances never trigger. When false, embedded impetus instances always trigger together.
+        startThreshold = _ref$startThreshold === undefined ? { x: 0, y: 0 } : _ref$startThreshold;
 
         _classCallCheck(this, Impetus);
 
@@ -48,6 +56,9 @@
         var paused = false;
         var decelerating = false;
         var trackingPoints = [];
+        var propagationForceStopped = false;
+        var previousPosition = null;
+        var moveTotalDistance = null;
 
         /**
          * Initialize instance
@@ -85,6 +96,15 @@
             sourceEl.addEventListener('touchstart', onDown, getPassiveSupported() ? { passive: true } : false);
             sourceEl.addEventListener('mousedown', onDown, getPassiveSupported() ? { passive: true } : false);
         })();
+
+        /**
+         * Calling this will immediately stop propagating touch
+         * events to parent impetus instances until an "up" event
+         * occurs in the current impetus.
+         */
+        this.forceStopPropagation = function () {
+            propagationForceStopped = true;
+        };
 
         /**
          * In edge cases where you may need to
@@ -238,8 +258,13 @@
             // it's been marked as handled.
             // https://dlinau.wordpress.com/2015/09/16/avoid-mixing-reacts-event-system-with-native-dom-event-handling/
             // https://github.com/facebook/react/issues/8693
-            if (ev.handledByImpetus) return;
-            ev.handledByImpetus = true;
+            if (disablePropagation || propagationForceStopped) {
+                if (ev.handledByImpetus) return;
+                ev.handledByImpetus = true;
+            }
+
+            previousPosition = getPosition(ev);
+            moveTotalDistance = { x: 0, y: 0 };
 
             var event = normalizeEvent(ev);
             if (!pointerActive && !paused) {
@@ -253,6 +278,7 @@
                 addTrackingPoint(pointerLastX, pointerLastY);
 
                 addRuntimeEvents();
+                if (down) down();
             }
         }
 
@@ -264,7 +290,20 @@
             ev.preventDefault();
             var event = normalizeEvent(ev);
 
-            if (pointerActive && event.id === pointerId) {
+            // This is required so that we can force propagation stop after starting to drag
+            if (disablePropagation || propagationForceStopped) {
+                if (ev.handledByImpetus) return;
+                ev.handledByImpetus = true;
+            }
+
+            // Check if we've moved the pointer enough to actually start dragging
+            var position = getPosition(ev);
+            moveTotalDistance.x += Math.abs(position.x - previousPosition.x);
+            moveTotalDistance.y += Math.abs(position.y - previousPosition.y);
+            var exceededStartThreshold = moveTotalDistance.x > startThreshold.x && moveTotalDistance.y > startThreshold.y;
+            previousPosition = position;
+
+            if (pointerActive && event.id === pointerId && exceededStartThreshold) {
                 pointerCurrentX = event.x;
                 pointerCurrentY = event.y;
                 addTrackingPoint(pointerLastX, pointerLastY);
@@ -280,7 +319,9 @@
             var event = normalizeEvent(ev);
 
             if (pointerActive && event.id === pointerId) {
+                propagationForceStopped = false;
                 stopTracking();
+                if (up) up();
             }
         }
 
@@ -481,6 +522,16 @@
             } else {
                 decelerating = false;
             }
+        }
+
+        /**
+         * Get an event's position as an object with x and y coordinates
+         */
+        function getPosition(ev) {
+            return {
+                x: ev.touches ? ev.touches[0].clientX : ev.clientX,
+                y: ev.touches ? ev.touches[0].clientY : ev.clientY
+            };
         }
     }
 
