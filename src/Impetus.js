@@ -234,10 +234,9 @@ export default class Impetus {
             // it's been marked as handled.
             // https://dlinau.wordpress.com/2015/09/16/avoid-mixing-reacts-event-system-with-native-dom-event-handling/
             // https://github.com/facebook/react/issues/8693
-            if (disablePropagation || propagationForceStopped) {
-              if (ev.handledByImpetus) return;
-              ev.handledByImpetus = true;
-            }
+            if (ev.handledByImpetus) return;
+            if (disablePropagation || propagationForceStopped)
+                ev.handledByImpetus = true;
 
             previousPosition = getPosition(ev);
             moveTotalDistance = { x: 0, y: 0 };
@@ -267,10 +266,9 @@ export default class Impetus {
             var event = normalizeEvent(ev);
 
             // This is required so that we can force propagation stop after starting to drag
-            if (disablePropagation || propagationForceStopped) {
-              if (ev.handledByImpetus) return;
-              ev.handledByImpetus = true;
-            }
+            if (ev.handledByImpetus) return;
+            if (disablePropagation || propagationForceStopped)
+                ev.handledByImpetus = true;
 
             // Check if we've moved the pointer enough to actually start dragging
             var position = getPosition(ev);
